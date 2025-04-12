@@ -456,27 +456,37 @@ public class PreparedStatementTest extends JdbcIntegrationTest {
     void testStatementSplit() throws Exception {
         try (Connection conn = getJdbcConnection()) {
             try (Statement stmt = conn.createStatement()) {
-                stmt.execute("CREATE TABLE `with_complex_id` (`v?``1` Int32, \"v?\"\"2\" Int32) ENGINE Memory;");
+                stmt.execute("CREATE TABLE `with_complex_id` (`v?``1` Int32, \"v?\"\"2\" Int32,`v?\\`3` Int32, \"v?\\\"4\" Int32) ENGINE Memory;");
             }
-            String insertQuery = "-- line comment ?\n"
-                    + "/* block commend ? \n */"
-                    + "INSERT INTO `with_complex_id`(`v?``1`, \"v?\"\"2\") VALUES (?, ?);";
+            String insertQuery = "-- line comment1 ?\n"
+                    + "# line comment2 ?\n"
+                    + "#! line comment3 ?\n"
+                    + "/* block comment ? \n */"
+                    + "INSERT INTO `with_complex_id`(`v?``1`, \"v?\"\"2\",`v?\\`3`, \"v?\\\"4\") VALUES (?, ?, ?, ?);";
             try (PreparedStatement stmt = conn.prepareStatement(insertQuery)) {
                 stmt.setInt(1, 1);
                 stmt.setInt(2, 2);
+                stmt.setInt(3, 3);
+                stmt.setInt(4, 4);
                 stmt.execute();
             }
             String selectQuery = "-- line comment ?\n"
-                    + "/* block commend ? \n */"
-                    + "SELECT `v?``1`, \"v?\"\"2\", 'test '' string ?' FROM `with_complex_id` WHERE \"v?\"\"2\" = ? AND `v?``1` = ?";
+                    + "/* block comment ? \n */"
+                    + "SELECT `v?``1`, \"v?\"\"2\",`v?\\`3`, \"v?\\\"4\", 'test '' string1 ?', 'test \\' string2 ?', 'test string3 ?\\\\' FROM `with_complex_id` WHERE `v?``1` = ? AND \"v?\"\"2\" = ? AND `v?\\`3` = ? AND \"v?\\\"4\" = ?";
             try (PreparedStatement stmt = conn.prepareStatement(selectQuery)) {
-                stmt.setInt(1, 2);
-                stmt.setInt(2, 1);
+                stmt.setInt(1, 1);
+                stmt.setInt(2, 2);
+                stmt.setInt(3, 3);
+                stmt.setInt(4, 4);
                 try (ResultSet rs = stmt.executeQuery()) {
                     assertTrue(rs.next());
                     assertEquals(rs.getInt(1), 1);
                     assertEquals(rs.getInt(2), 2);
-                    assertEquals(rs.getString(3), "test ' string ?");
+                    assertEquals(rs.getInt(3), 3);
+                    assertEquals(rs.getInt(4), 4);
+                    assertEquals(rs.getString(5), "test ' string1 ?");
+                    assertEquals(rs.getString(6), "test ' string2 ?");
+                    assertEquals(rs.getString(7), "test string3 ?\\");
                 }
             }
         }

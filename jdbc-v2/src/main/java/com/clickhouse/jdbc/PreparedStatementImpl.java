@@ -45,7 +45,6 @@ import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
-import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Map;
 
@@ -67,6 +66,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     String insertIntoSQL;
 
     StatementType statementType;
+
     public PreparedStatementImpl(ConnectionImpl connection, String sql) throws SQLException {
         super(connection);
         this.originalSql = sql.trim();
@@ -84,7 +84,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         this.defaultCalendar = connection.defaultCalendar;
     }
 
-    private String compileSql(String []segments) {
+    private String compileSql(String [] segments) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < segments.length; i++) {
             sb.append(segments[i]);
@@ -95,6 +95,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         LOG.trace("Compiled SQL: {}", sb);
         return sb.toString();
     }
+
     @Override
     public ResultSet executeQuery() throws SQLException {
         checkClosed();
@@ -533,14 +534,14 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
             } else if (x instanceof ZonedDateTime) {
                 return encodeObject(((ZonedDateTime) x).toInstant());
             } else if (x instanceof Instant) {
-                return "fromUnixTimestamp64Nano(" + (((Instant) x).getEpochSecond() * 1_000_000_000L + ((Instant) x).getNano())+ ")";
+                return "fromUnixTimestamp64Nano(" + (((Instant) x).getEpochSecond() * 1_000_000_000L + ((Instant) x).getNano()) + ")";
             } else if (x instanceof InetAddress) {
                 return "'" + ((InetAddress) x).getHostAddress() + "'";
             } else if (x instanceof Array) {
                 StringBuilder listString = new StringBuilder();
                 listString.append("[");
                 int i = 0;
-                for (Object item : (Object[])((Array) x).getArray()) {
+                for (Object item : (Object[]) ((Array) x).getArray()) {
                     if (i > 0) {
                         listString.append(", ");
                     }
@@ -635,14 +636,14 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
 
     private static String [] splitStatement(String sql) {
         List<String> segments = new ArrayList<>();
-        char [] chars = sql.toCharArray();
+        char[] chars = sql.toCharArray();
         int segmentStart = 0;
         for (int i = 0; i < chars.length; i++) {
             char c = chars[i];
             if (c == '\'' || c == '"' || c == '`') {
                 // string literal or identifier
-                i = skip(chars, i + 1, c, c);
-            } else if (c == '/' && lookahead(chars, i + 1) == '*') {
+                i = skip(chars, i + 1, c, true);
+            } else if (c == '/' && lookahead(chars, i) == '*') {
                 // block comment
                 int end = sql.indexOf("*/", i);
                 if (end == -1) {
@@ -650,9 +651,9 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
                     break;
                 }
                 i = end + 1;
-            } else if (c == '-' && lookahead(chars, i + 1) == '-') {
+            } else if (c == '#' || (c == '-' && lookahead(chars, i) == '-')) {
                 // line comment
-                i = skip(chars, i + 1, '\n', '\0');
+                i = skip(chars, i + 1, '\n', false);
             } else if (c == '?') {
                 // question mark
                 segments.add(sql.substring(segmentStart, i));
@@ -668,27 +669,34 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         return segments.toArray(new String[0]);
     }
 
-    private static int skip(char [] chars, int from, char until, char escape) {
+    private static int skip(char[] chars, int from, char until, boolean escape) {
         for (int i = from; i < chars.length; i++) {
-            if (escape == chars[i] && lookahead(chars, i + 1) == until) {
-                // skip escaped char
-                i++;
-                continue;
+            char curr = chars[i];
+            if (escape) {
+                char next = lookahead(chars, i);
+                if ((curr == '\\' && (next == '\\' || next == until)) || (curr == until && next == until)) {
+                    // should skip:
+                    // 1) double \\ (backslash escaped with backslash)
+                    // 2) \[until] ([until] char, escaped with backslash)
+                    // 3) [until][until] ([until] char, escaped with [until])
+                    i++;
+                    continue;
+                }
             }
 
-            if (chars[i] == until) {
+            if (curr == until) {
                 return i;
             }
         }
         return chars.length;
     }
 
-    private static char lookahead(char [] chars, int pos) {
+    private static char lookahead(char[] chars, int pos) {
+        pos = pos + 1;
         if (pos >= chars.length) {
             return '\0';
         }
         return chars[pos];
     }
-
 
 }

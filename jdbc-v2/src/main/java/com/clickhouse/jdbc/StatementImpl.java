@@ -174,8 +174,8 @@ public class StatementImpl implements Statement, JdbcV2Wrapper {
 
         QuerySettings mergedSettings = QuerySettings.merge(connection.getDefaultQuerySettings(), settings);
         if (maxRows > 0) {
-            mergedSettings.setOption(String.format("clickhouse_setting_%s", ServerSettings.MAX_RESULT_ROWS), maxRows);
-            mergedSettings.setOption(String.format("clickhouse_setting_%s", ServerSettings.RESULT_OVERFLOW_MODE), "break");
+            mergedSettings.setOption(ClientConfigProperties.serverSetting(ServerSettings.MAX_RESULT_ROWS), maxRows);
+            mergedSettings.setOption(ClientConfigProperties.serverSetting(ServerSettings.RESULT_OVERFLOW_MODE), "break");
         }
 
         if (mergedSettings.getQueryId() != null) {
