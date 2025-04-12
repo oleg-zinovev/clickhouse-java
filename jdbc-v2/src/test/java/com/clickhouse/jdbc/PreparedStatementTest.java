@@ -6,8 +6,10 @@ import org.testng.annotations.Test;
 
 import java.sql.Array;
 import java.sql.Connection;
+import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
@@ -446,6 +448,49 @@ public class PreparedStatementTest extends JdbcIntegrationTest {
                     assertTrue(rs.next());
                     assertEquals(rs.getInt(1), 10);
                 }
+            }
+        }
+    }
+
+    @Test(groups = { "integration" })
+    void testStatementSplit() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE `with_complex_id` (`v?``1` Int32, \"v?\"\"2\" Int32) ENGINE Memory;");
+            }
+            String insertQuery = "-- line comment ?\n"
+                    + "/* block commend ? \n */"
+                    + "INSERT INTO `with_complex_id`(`v?``1`, \"v?\"\"2\") VALUES (?, ?);";
+            try (PreparedStatement stmt = conn.prepareStatement(insertQuery)) {
+                stmt.setInt(1, 1);
+                stmt.setInt(2, 2);
+                stmt.execute();
+            }
+            String selectQuery = "-- line comment ?\n"
+                    + "/* block commend ? \n */"
+                    + "SELECT `v?``1`, \"v?\"\"2\", 'test '' string ?' FROM `with_complex_id` WHERE \"v?\"\"2\" = ? AND `v?``1` = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(selectQuery)) {
+                stmt.setInt(1, 2);
+                stmt.setInt(2, 1);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
+                    assertEquals(rs.getInt(1), 1);
+                    assertEquals(rs.getInt(2), 2);
+                    assertEquals(rs.getString(3), "test ' string ?");
+                }
+            }
+        }
+    }
+
+    @Test(groups = { "integration" })
+    void testPreparedStatementMd() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (PreparedStatement stmt = conn.prepareStatement("select 1::Int32 as value")) {
+                ResultSetMetaData md = stmt.getMetaData();
+                assertNotNull(md);
+                assertEquals(md.getColumnCount(), 1);
+                assertEquals(md.getColumnName(1), "value");
+                assertEquals(md.getColumnType(1), Types.INTEGER);
             }
         }
     }

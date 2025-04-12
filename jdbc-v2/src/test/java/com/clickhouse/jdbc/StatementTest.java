@@ -711,4 +711,18 @@ public class StatementTest extends JdbcIntegrationTest {
         }
     }
 
+    @Test(groups = { "integration" })
+    public void testExecuteWithMaxRows() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.setMaxRows(1);
+                try (ResultSet rs = stmt.executeQuery("SELECT 1 AS num")) {
+                    assertTrue(rs.next());
+                    assertFalse(rs.next());
+                }
+                Assert.assertFalse(((StatementImpl)stmt).getLastQueryId().isEmpty());
+            }
+        }
+    }
+
 }

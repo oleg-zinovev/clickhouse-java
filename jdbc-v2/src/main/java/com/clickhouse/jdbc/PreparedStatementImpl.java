@@ -1,5 +1,7 @@
 package com.clickhouse.jdbc;
 
+import com.clickhouse.client.api.metadata.TableSchema;
+import com.clickhouse.data.ClickHouseColumn;
 import com.clickhouse.data.Tuple;
 import com.clickhouse.jdbc.internal.ExceptionUtils;
 import org.slf4j.Logger;
@@ -26,6 +28,7 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLType;
 import java.sql.SQLXML;
+import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -68,7 +71,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         super(connection);
         this.originalSql = sql.trim();
         //Split the sql string into an array of strings around question mark tokens
-        this.sqlSegments = originalSql.split("\\?");
+        this.sqlSegments = splitStatement(originalSql);
         this.statementType = parseStatementType(originalSql);
 
         if (statementType == StatementType.INSERT) {
@@ -77,13 +80,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         }
 
         //Create an array of objects to store the parameters
-        if (originalSql.contains("?")) {
-            int count = originalSql.length() - originalSql.replace("?", "").length();
-            this.parameters = new Object[count];
-        } else {
-            this.parameters = new Object[0];
-        }
-
+        this.parameters = new Object[sqlSegments.length - 1];
         this.defaultCalendar = connection.defaultCalendar;
     }
 
@@ -305,7 +302,26 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     @Override
     public ResultSetMetaData getMetaData() throws SQLException {
         checkClosed();
-        return null;
+        if (this.currentResultSet != null) {
+            return currentResultSet.getMetaData();
+        } else if (statementType != StatementType.SELECT) {
+            return null;
+        }
+
+        String sql = compileSql(sqlSegments);
+        String describe = String.format("describe (\n%s\n)", sql);
+
+        List<ClickHouseColumn> columns = new ArrayList<>();
+        try (Statement stmt = connection.createStatement()) {
+            try (ResultSet rs = stmt.executeQuery(describe)) {
+                while (rs.next()) {
+                    ClickHouseColumn column = ClickHouseColumn.of(rs.getString(1), rs.getString(2));
+                    columns.add(column);
+                }
+            }
+        }
+        TableSchema schema = new TableSchema(columns);
+        return new com.clickhouse.jdbc.metadata.ResultSetMetaData(schema);
     }
 
     @Override
@@ -616,4 +632,63 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     private static String escapeString(String x) {
         return x.replace("\\", "\\\\").replace("'", "\\'");//Escape single quotes
     }
+
+    private static String [] splitStatement(String sql) {
+        List<String> segments = new ArrayList<>();
+        char [] chars = sql.toCharArray();
+        int segmentStart = 0;
+        for (int i = 0; i < chars.length; i++) {
+            char c = chars[i];
+            if (c == '\'' || c == '"' || c == '`') {
+                // string literal or identifier
+                i = skip(chars, i + 1, c, c);
+            } else if (c == '/' && lookahead(chars, i + 1) == '*') {
+                // block comment
+                int end = sql.indexOf("*/", i);
+                if (end == -1) {
+                    // missing comment end
+                    break;
+                }
+                i = end + 1;
+            } else if (c == '-' && lookahead(chars, i + 1) == '-') {
+                // line comment
+                i = skip(chars, i + 1, '\n', '\0');
+            } else if (c == '?') {
+                // question mark
+                segments.add(sql.substring(segmentStart, i));
+                segmentStart = i + 1;
+            }
+        }
+        if (segmentStart < chars.length) {
+            segments.add(sql.substring(segmentStart));
+        } else {
+            // add empty segment in case question mark was last char of sql
+            segments.add("");
+        }
+        return segments.toArray(new String[0]);
+    }
+
+    private static int skip(char [] chars, int from, char until, char escape) {
+        for (int i = from; i < chars.length; i++) {
+            if (escape == chars[i] && lookahead(chars, i + 1) == until) {
+                // skip escaped char
+                i++;
+                continue;
+            }
+
+            if (chars[i] == until) {
+                return i;
+            }
+        }
+        return chars.length;
+    }
+
+    private static char lookahead(char [] chars, int pos) {
+        if (pos >= chars.length) {
+            return '\0';
+        }
+        return chars[pos];
+    }
+
+
 }
