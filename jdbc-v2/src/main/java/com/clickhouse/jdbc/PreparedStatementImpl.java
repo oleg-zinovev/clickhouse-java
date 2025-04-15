@@ -305,24 +305,11 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         checkClosed();
         if (this.currentResultSet != null) {
             return currentResultSet.getMetaData();
-        } else if (statementType != StatementType.SELECT) {
-            return null;
+        } else {
+            String sql = compileSql(sqlSegments);
+            TableSchema schema = connection.client.getTableSchemaFromQuery("\n" + sql + "\n");
+            return new com.clickhouse.jdbc.metadata.ResultSetMetaData(schema);
         }
-
-        String sql = compileSql(sqlSegments);
-        String describe = String.format("describe (\n%s\n)", sql);
-
-        List<ClickHouseColumn> columns = new ArrayList<>();
-        try (Statement stmt = connection.createStatement()) {
-            try (ResultSet rs = stmt.executeQuery(describe)) {
-                while (rs.next()) {
-                    ClickHouseColumn column = ClickHouseColumn.of(rs.getString(1), rs.getString(2));
-                    columns.add(column);
-                }
-            }
-        }
-        TableSchema schema = new TableSchema(columns);
-        return new com.clickhouse.jdbc.metadata.ResultSetMetaData(schema);
     }
 
     @Override
