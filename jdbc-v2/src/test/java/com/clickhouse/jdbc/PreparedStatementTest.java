@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -934,6 +935,20 @@ public class PreparedStatementTest extends JdbcIntegrationTest {
                 }
 
                 assertEquals(count, 2);
+            }
+        }
+    }
+
+
+    @Test(groups = { "integration" })
+    void testPreparedStatementMd() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (PreparedStatement stmt = conn.prepareStatement("select 1::Int32 as value")) {
+                ResultSetMetaData md = stmt.getMetaData();
+                assertNotNull(md);
+                assertEquals(md.getColumnCount(), 1);
+                assertEquals(md.getColumnName(1), "value");
+                assertEquals(md.getColumnType(1), Types.INTEGER);
             }
         }
     }
