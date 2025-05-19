@@ -936,4 +936,15 @@ public class PreparedStatementTest extends JdbcIntegrationTest {
             }
         }
     }
+
+    @Test(groups = { "integration" })
+    void testUnsupportedExpr() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (PreparedStatement stmt = conn.prepareStatement("explain pipeline select * from (select 1 as id) s where s.id = ? and 1=1 and ?=?")) {
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
+                }
+            }
+        }
+    }
 }
