@@ -78,7 +78,7 @@ public class ParsedStatement extends ClickHouseParserBaseListener {
         ClickHouseParser.QueryContext qCtx = ctx.query();
         if (qCtx != null) {
             if (qCtx.selectStmt() != null || qCtx.selectUnionStmt() != null || qCtx.showStmt() != null
-                    || qCtx.describeStmt() != null) {
+                    || qCtx.describeStmt() != null || qCtx.explainStmt() != null) {
                 setHasResultSet(true);
             }
         }

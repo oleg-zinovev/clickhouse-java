@@ -16,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -934,22 +935,6 @@ public class PreparedStatementTest extends JdbcIntegrationTest {
         }
     }
 
-    @Test(dataProvider = "testReplaceQuestionMark_dataProvider")
-    public void testReplaceQuestionMark(String sql, String result) {
-        assertEquals(PreparedStatementImpl.replaceQuestionMarks(sql, "NULL"), result);
-    }
-
-    @DataProvider(name = "testReplaceQuestionMark_dataProvider")
-    public static Object[][] testReplaceQuestionMark_dataProvider() {
-        return new Object[][] {
-                {"", ""},
-                {"     ", "     "},
-                {"SELECT * FROM t WHERE a = '?'", "SELECT * FROM t WHERE a = '?'"},
-                {"SELECT `v2?` FROM t WHERE `v1?` = ?", "SELECT `v2?` FROM t WHERE `v1?` = NULL"},
-                {"INSERT INTO \"t2?\" VALUES (?, ?, 'some_?', ?)", "INSERT INTO \"t2?\" VALUES (NULL, NULL, 'some_?', NULL)"}
-        };
-    }
-
     @Test(groups = { "integration" })
     public void testJdbcEscapeSyntax() throws Exception {
         if (ClickHouseVersion.of(getServerVersion()).check("(,23.8]")) {
@@ -1076,6 +1061,31 @@ public class PreparedStatementTest extends JdbcIntegrationTest {
                     Assert.assertEquals(rs.getInt(3), 123);
                     Assert.assertEquals(rs.getString(4), uuid.toString());
                     Assert.assertEquals(rs.getInt(5), 3003001);
+                }
+            }
+        }
+    }
+
+
+    @Test(groups = { "integration" })
+    void testPreparedStatementMd() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (PreparedStatement stmt = conn.prepareStatement("select 1::Int32 as value")) {
+                ResultSetMetaData md = stmt.getMetaData();
+                assertNotNull(md);
+                assertEquals(md.getColumnCount(), 1);
+                assertEquals(md.getColumnName(1), "value");
+                assertEquals(md.getColumnType(1), Types.INTEGER);
+            }
+        }
+    }
+
+    @Test(groups = { "integration" })
+    void testUnsupportedExpr() throws Exception {
+        try (Connection conn = getJdbcConnection()) {
+            try (PreparedStatement stmt = conn.prepareStatement("explain pipeline select * from (select 1 as id) s where s.id = ? and 1=1 and ?=?")) {
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertTrue(rs.next());
                 }
             }
         }

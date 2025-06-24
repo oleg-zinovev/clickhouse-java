@@ -53,8 +53,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class PreparedStatementImpl extends StatementImpl implements PreparedStatement, JdbcV2Wrapper {
     private static final Logger LOG = LoggerFactory.getLogger(PreparedStatementImpl.class);
@@ -68,6 +66,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     private final Calendar defaultCalendar;
 
     private final String originalSql;
+    private final int[] parameterPositions;
     private final String[] values; // temp value holder (set can be called > once)
     private final List<StringBuilder> batchValues; // composed value statements
     private final ParsedPreparedStatement parsedPreparedStatement;
@@ -84,8 +83,9 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         super(connection);
         this.isPoolable = true; // PreparedStatement is poolable by default
         this.originalSql = sql;
+        this.parameterPositions = parsedStatement.isHasErrors() ? parameterPositions(sql) : parsedStatement.getParamPositions();
         this.parsedPreparedStatement = parsedStatement;
-        this.argCount = parsedStatement.getArgCount();
+        this.argCount = parsedStatement.isHasErrors() ? parameterPositions.length : parsedStatement.getArgCount();
 
         this.defaultCalendar = connection.defaultCalendar;
         this.values = new String[argCount];
@@ -94,10 +94,9 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         int valueListStartPos = parsedStatement.getAssignValuesListStartPosition();
         int valueListStopPos = parsedStatement.getAssignValuesListStopPosition();
         if (parsedStatement.getAssignValuesGroups() == 1 && valueListStartPos > -1 && valueListStopPos > -1) {
-            int[] positions = parsedStatement.getParamPositions();
             paramPositionsInDataClause = new int[argCount];
             for (int i = 0; i < argCount; i++) {
-                int p = positions[i] - valueListStartPos;
+                int p = parameterPositions[i] - valueListStartPos;
                 paramPositionsInDataClause[i] = p;
             }
 
@@ -115,12 +114,12 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     private String buildSQL() {
         StringBuilder compiledSql = new StringBuilder(originalSql);
         int posOffset = 0;
-        int[] positions = parsedPreparedStatement.getParamPositions();
         for (int i = 0; i < argCount; i++) {
-            int p = positions[i] + posOffset;
+            int p = parameterPositions[i] + posOffset;
             String val = values[i];
-            compiledSql.replace(p, p+1, val == null ? "NULL" : val);
-            posOffset += val == null ? 0 : val.length() - 1;
+            val = val == null ? "NULL" : val;
+            compiledSql.replace(p, p + 1, val);
+            posOffset += val.length() - 1;
         }
         return compiledSql.toString();
     }
@@ -279,8 +278,9 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
             int posOffset = 0;
             for (int i = 0; i < argCount; i++) {
                 int p = paramPositionsInDataClause[i] + posOffset;
-                valuesClause.replace(p, p + 1, values[i]);
-                posOffset += values[i].length() - 1;
+                String val = values[i] == null ? "NULL" : values[i];
+                valuesClause.replace(p, p + 1, val);
+                posOffset += val.length() - 1;
             }
             batchValues.add(valuesClause);
         } else {
@@ -377,7 +377,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
             if (parsedPreparedStatement.isHasResultSet()) {
                 try {
                     // Replace '?' with NULL to make SQL valid for DESCRIBE
-                    String sql = replaceQuestionMarks(originalSql, NULL_LITERAL);
+                    String sql = buildSQL();
                     TableSchema tSchema = connection.getClient().getTableSchemaFromQuery(sql);
                     resultSetMetaData = new ResultSetMetaDataImpl(tSchema.getColumns(),
                             connection.getSchema(), connection.getCatalog(),
@@ -397,36 +397,6 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
         }
 
         return resultSetMetaData;
-    }
-
-    public static final String NULL_LITERAL = "NULL";
-
-    private static final Pattern REPLACE_Q_MARK_PATTERN = Pattern.compile("(\"[^\"]*\"|`[^`]*`|'[^']*')|(\\?)");
-
-    public static String replaceQuestionMarks(String sql, final String replacement) {
-        Matcher matcher = REPLACE_Q_MARK_PATTERN.matcher(sql);
-
-        StringBuilder result = new StringBuilder();
-
-        int lastPos = 0;
-        while (matcher.find()) {
-            String text;
-            if ((text = matcher.group(1)) != null) {
-                // Quoted string — keep as-is
-                String str = Matcher.quoteReplacement(text);
-                result.append(sql, lastPos, matcher.start()).append(str);
-                lastPos = matcher.end();
-            } else if (matcher.group(2) != null) {
-                // Question mark outside quotes — replace it
-                String str = Matcher.quoteReplacement(replacement);
-                result.append(sql, lastPos, matcher.start()).append(str);
-                lastPos = matcher.end();
-            }
-        }
-
-        // Add rest of the `sql`
-        result.append(sql, lastPos, sql.length());
-        return result.toString();
     }
 
     @Override
@@ -487,9 +457,9 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
      * Returned metadata has only minimal information about parameters. Currently only their count.
      * Current implementation do not parse SQL to detect type of each parameter.
      *
-     * @see ParameterMetaDataImpl
      * @return {@link ParameterMetaDataImpl}
      * @throws SQLException if the statement is close
+     * @see ParameterMetaDataImpl
      */
     @Override
     public ParameterMetaData getParameterMetaData() throws SQLException {
@@ -633,7 +603,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final void addBatch(String sql) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "addBatch(String) cannot be called in PreparedStatement or CallableStatement!",
+                "addBatch(String) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -641,7 +611,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final boolean execute(String sql) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "execute(String) cannot be called in PreparedStatement or CallableStatement!",
+                "execute(String) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -649,7 +619,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final boolean execute(String sql, int autoGeneratedKeys) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "execute(String, int) cannot be called in PreparedStatement or CallableStatement!",
+                "execute(String, int) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -657,7 +627,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final boolean execute(String sql, int[] columnIndexes) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "execute(String, int[]) cannot be called in PreparedStatement or CallableStatement!",
+                "execute(String, int[]) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -665,7 +635,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final boolean execute(String sql, String[] columnNames) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "execute(String, String[]) cannot be called in PreparedStatement or CallableStatement!",
+                "execute(String, String[]) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -673,7 +643,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final long executeLargeUpdate(String sql) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeLargeUpdate(String) cannot be called in PreparedStatement or CallableStatement!",
+                "executeLargeUpdate(String) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -681,7 +651,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final long executeLargeUpdate(String sql, int autoGeneratedKeys) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeLargeUpdate(String, int) cannot be called in PreparedStatement or CallableStatement!",
+                "executeLargeUpdate(String, int) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -689,7 +659,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final long executeLargeUpdate(String sql, int[] columnIndexes) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeLargeUpdate(String, int[]) cannot be called in PreparedStatement or CallableStatement!",
+                "executeLargeUpdate(String, int[]) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -697,7 +667,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final long executeLargeUpdate(String sql, String[] columnNames) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeLargeUpdate(String, String[]) cannot be called in PreparedStatement or CallableStatement!",
+                "executeLargeUpdate(String, String[]) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -705,7 +675,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final ResultSet executeQuery(String sql) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeQuery(String) cannot be called in PreparedStatement or CallableStatement!",
+                "executeQuery(String) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -713,7 +683,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final int executeUpdate(String sql) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeUpdate(String) cannot be called in PreparedStatement or CallableStatement!",
+                "executeUpdate(String) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -721,7 +691,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final int executeUpdate(String sql, int autoGeneratedKeys) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeUpdate(String, int) cannot be called in PreparedStatement or CallableStatement!",
+                "executeUpdate(String, int) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -729,7 +699,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final int executeUpdate(String sql, int[] columnIndexes) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeUpdate(String, int[]) cannot be called in PreparedStatement or CallableStatement!",
+                "executeUpdate(String, int[]) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -737,7 +707,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
     public final int executeUpdate(String sql, String[] columnNames) throws SQLException {
         checkClosed();
         throw new SQLException(
-                        "executeUpdate(String, String[]) cannot be called in PreparedStatement or CallableStatement!",
+                "executeUpdate(String, String[]) cannot be called in PreparedStatement or CallableStatement!",
                 ExceptionUtils.SQL_STATE_WRONG_OBJECT_TYPE);
     }
 
@@ -845,7 +815,7 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
                 StringBuilder tupleString = new StringBuilder();
                 tupleString.append("(");
                 Tuple t = (Tuple) x;
-                Object [] values = t.getValues();
+                Object[] values = t.getValues();
                 int i = 0;
                 for (Object item : values) {
                     if (i > 0) {
@@ -869,5 +839,63 @@ public class PreparedStatementImpl extends StatementImpl implements PreparedStat
 
     private static String escapeString(String x) {
         return x.replace("\\", "\\\\").replace("'", "\\'");//Escape single quotes
+    }
+
+
+    private static int[] parameterPositions(String sql) {
+        List<Integer> indices = new ArrayList<>();
+        char[] chars = sql.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            char c = chars[i];
+            if (c == '\'' || c == '"' || c == '`') {
+                // string literal or identifier
+                i = skip(chars, i + 1, c, true);
+            } else if (c == '/' && lookahead(chars, i) == '*') {
+                // block comment
+                int end = sql.indexOf("*/", i);
+                if (end == -1) {
+                    // missing comment end
+                    break;
+                }
+                i = end + 1;
+            } else if (c == '#' || (c == '-' && lookahead(chars, i) == '-')) {
+                // line comment
+                i = skip(chars, i + 1, '\n', false);
+            } else if (c == '?') {
+                // question mark
+                indices.add(i);
+            }
+        }
+        return indices.stream().mapToInt(i -> i).toArray();
+    }
+
+    private static int skip(char[] chars, int from, char until, boolean escape) {
+        for (int i = from; i < chars.length; i++) {
+            char curr = chars[i];
+            if (escape) {
+                char next = lookahead(chars, i);
+                if ((curr == '\\' && (next == '\\' || next == until)) || (curr == until && next == until)) {
+                    // should skip:
+                    // 1) double \\ (backslash escaped with backslash)
+                    // 2) \[until] ([until] char, escaped with backslash)
+                    // 3) [until][until] ([until] char, escaped with [until])
+                    i++;
+                    continue;
+                }
+            }
+
+            if (curr == until) {
+                return i;
+            }
+        }
+        return chars.length;
+    }
+
+    private static char lookahead(char[] chars, int pos) {
+        pos = pos + 1;
+        if (pos >= chars.length) {
+            return '\0';
+        }
+        return chars[pos];
     }
 }

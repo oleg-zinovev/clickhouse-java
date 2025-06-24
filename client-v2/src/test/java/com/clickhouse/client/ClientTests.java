@@ -63,7 +63,7 @@ public class ClientTests extends BaseIntegrationTest {
     public static Object[][] secureClientProvider() throws Exception {
         ClickHouseNode node = ClickHouseServerForTest.getClickHouseNode(ClickHouseProtocol.HTTP,
                 true, ClickHouseNode.builder()
-                                .addOption(ClickHouseClientOption.SSL_MODE.getKey(), "none")
+                        .addOption(ClickHouseClientOption.SSL_MODE.getKey(), "none")
                         .addOption(ClickHouseClientOption.SSL.getKey(), "true").build());
         return new Client[][]{
                 {
@@ -72,6 +72,14 @@ public class ClientTests extends BaseIntegrationTest {
                                 .setUsername("default")
                                 .setPassword("")
                                 .setRootCertificate("containers/clickhouse-server/certs/localhost.crt")
+                                .build()
+                },
+                {
+                        new Client.Builder()
+                                .addEndpoint("https://" + node.getHost() + ":" + node.getPort())
+                                .setUsername("default")
+                                .setPassword("")
+                                .setOption(ClientConfigProperties.SSL_MODE.getKey(), "none")
                                 .build()
                 },
                 {
