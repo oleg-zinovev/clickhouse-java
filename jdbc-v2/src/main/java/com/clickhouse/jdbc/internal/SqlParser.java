@@ -15,30 +15,29 @@ import java.util.regex.Pattern;
 
 public class SqlParser {
 
-    private static final Logger LOG = LoggerFactory.getLogger(SqlParser.class);
-
     public ParsedStatement parsedStatement(String sql) {
-
-        CharStream charStream = CharStreams.fromString(sql);
-        ClickHouseLexer lexer = new ClickHouseLexer(charStream);
-        ClickHouseParser parser = new ClickHouseParser(new CommonTokenStream(lexer));
-        parser.removeErrorListeners();
-        parser.addErrorListener(new ParserErrorListener());
-        ClickHouseParser.QueryStmtContext parseTree = parser.queryStmt();
+        ClickHouseParser.QueryStmtContext parseTree = parseQueryStmt(sql);
         ParsedStatement parserListener = new ParsedStatement();
         IterativeParseTreeWalker.DEFAULT.walk(parserListener, parseTree);
-
         return parserListener;
     }
 
     public ParsedPreparedStatement parsePreparedStatement(String sql) {
-        CharStream charStream = CharStreams.fromString(sql);
-        ClickHouseLexer lexer = new ClickHouseLexer(charStream);
-        ClickHouseParser parser = new ClickHouseParser(new CommonTokenStream(lexer));
-        ClickHouseParser.QueryStmtContext parseTree = parser.queryStmt();
+        ClickHouseParser.QueryStmtContext parseTree = parseQueryStmt(sql);
         ParsedPreparedStatement parserListener = new ParsedPreparedStatement();
         IterativeParseTreeWalker.DEFAULT.walk(parserListener, parseTree);
         return parserListener;
+    }
+
+    private ClickHouseParser.QueryStmtContext parseQueryStmt(String sql) {
+        CharStream charStream = CharStreams.fromString(sql);
+        ClickHouseLexer lexer = new ClickHouseLexer(charStream);
+        lexer.removeErrorListeners();
+        lexer.addErrorListener(SqlErrorListener.INSTANCE);
+        ClickHouseParser parser = new ClickHouseParser(new CommonTokenStream(lexer));
+        parser.removeErrorListeners();
+        parser.addErrorListener(SqlErrorListener.INSTANCE);
+        return parser.queryStmt();
     }
 
     private final static Pattern UNQUOTE_INDENTIFIER = Pattern.compile(
@@ -48,7 +47,7 @@ public class SqlParser {
     public static String unquoteIdentifier(String str) {
         Matcher matcher = UNQUOTE_INDENTIFIER.matcher(str.trim());
         if (matcher.find()) {
-            return matcher.group(1);
+            return matcher.group(1).replace("\\\\", "\\");
         } else {
             return str;
         }
@@ -59,14 +58,18 @@ public class SqlParser {
             return str;
         }
         return str
+                .replace("\\", "\\\\")
                 .replace("'", "\\'")
                 .replace("\"", "\\\"");
     }
 
-    private static class ParserErrorListener extends BaseErrorListener {
+    private static final Logger LOG = LoggerFactory.getLogger(SqlParser.class);
+
+    private static class SqlErrorListener extends BaseErrorListener {
+        private static final SqlErrorListener INSTANCE = new SqlErrorListener();
         @Override
         public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol, int line, int charPositionInLine, String msg, RecognitionException e) {
-            LOG.warn("SQL syntax error at line: " + line + ", pos: " + charPositionInLine + ", " + msg);
+            LOG.debug("SQL syntax error at line: {}, pos: {}, {}", line, charPositionInLine, msg);
         }
     }
 }
