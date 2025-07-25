@@ -630,6 +630,12 @@ public class BinaryStreamReader {
                 itemClass = long.class;
             } else if (firstValue instanceof Boolean) {
                 itemClass = boolean.class;
+            } else if (firstValue instanceof Map<?, ?>) {
+                itemClass = Map.class;
+            } else if (firstValue instanceof List<?>) {
+                itemClass = List.class;
+            } else if (firstValue instanceof Iterable<?>) {
+                itemClass = Iterable.class;
             }
 
             array = new ArrayValue(itemClass, len);
@@ -757,7 +763,7 @@ public class BinaryStreamReader {
     public Map<?, ?> readMap(ClickHouseColumn column) throws IOException {
         int len = readVarInt(input);
         if (len == 0) {
-            return Collections.emptyMap();
+            return new LinkedHashMap<>(0);
         }
 
         ClickHouseColumn keyType = column.getKeyInfo();
