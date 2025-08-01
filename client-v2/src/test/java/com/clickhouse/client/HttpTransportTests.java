@@ -505,7 +505,10 @@ public class HttpTransportTests extends BaseIntegrationTest {
                         "Code: 901. DB::Exception: I write, erase, rewrite " +
                                 "Erase again, and then " +
                                 "A poppy blooms" +
-                                " (by Katsushika Hokusai)"}
+                                " (by Katsushika Hokusai)"},
+                {86, "Code: 86. DB::HTTPException: Received error from remote server http://127.0.0.1:9019/columns_info?use_connection_pooling=1&version=1&connection_string=jdbc%3Amysql%3A%2F%2F101.3.165.101%3A30101%2Fdb1%3FsslMode%3DDISABLED%26connectTimeout%3D3000%26user%3Didvp%26password%3Didvp&schema=db1&table=AGE&external_table_functions_use_nulls=1." +
+                        "\nHTTP status code: 400 'Bad Request', body length: 187 bytes, body: 'Communications link failure",
+                        "Code: 86. DB::HTTPException: Received error from remote server. HTTP status code: 400 'Bad Request', body length: 187 bytes, body: 'Communications link failure"}
         };
     }
 
