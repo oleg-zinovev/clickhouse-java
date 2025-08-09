@@ -60,12 +60,15 @@ import org.apache.hc.core5.util.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -81,7 +84,10 @@ import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
@@ -180,6 +186,13 @@ public class HttpAPIClientHelper {
                 );
             } catch (SSLException e) {
                 throw new ClientMisconfigurationException("Failed to create SSL context from certificates", e);
+            }
+        } else if ("none".equals(configuration.get(ClientConfigProperties.SSL_MODE.getKey()))) {
+            try {
+                sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(new KeyManager[0], new TrustManager[]{new TrustAllManager()}, new SecureRandom());
+            } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                throw new ClientException("Failed to create none validating SSL context", e);
             }
         }
         return sslContext;
@@ -332,9 +345,8 @@ public class HttpAPIClientHelper {
         return clientBuilder.build();
     }
 
-//    private static final String ERROR_CODE_PREFIX_PATTERN = "Code: %d. DB::Exception:";
-    private static final String ERROR_CODE_PREFIX_PATTERN = "%d. DB::Exception:";
-
+    private static final String ERROR_CODE_PREFIX_PATTERN = "Code: %d. DB::";
+    private static final String REMOTE_SERVER_ERROR_PATTERN = "Code: %d. DB::HTTPException: Received error from remote server ";
     /**
      * Reads status line and if error tries to parse response body to get server error message.
      *
@@ -347,7 +359,7 @@ public class HttpAPIClientHelper {
         try {
             body = httpResponse.getEntity().getContent();
             byte[] buffer = new byte[ERROR_BODY_BUFFER_SIZE];
-            byte[] lookUpStr = String.format(ERROR_CODE_PREFIX_PATTERN, serverCode).getBytes(StandardCharsets.UTF_8);
+            byte[] lookUpBytes = String.format(ERROR_CODE_PREFIX_PATTERN, serverCode).getBytes(StandardCharsets.UTF_8);
             StringBuilder msgBuilder = new StringBuilder();
             boolean found = false;
             while (true) {
@@ -369,10 +381,10 @@ public class HttpAPIClientHelper {
                 }
 
                 for (int i = 0; i < rBytes; i++) {
-                    if (buffer[i] == lookUpStr[0]) {
+                    if (buffer[i] == lookUpBytes[0]) {
                         found = true;
-                        for (int j = 1; j < Math.min(rBytes - i, lookUpStr.length); j++) {
-                            if (buffer[i + j] != lookUpStr[j]) {
+                        for (int j = 1; j < Math.min(rBytes - i, lookUpBytes.length); j++) {
+                            if (buffer[i + j] != lookUpBytes[j]) {
                                 found = false;
                                 break;
                             }
@@ -399,14 +411,34 @@ public class HttpAPIClientHelper {
 
             String msg = msgBuilder.toString().replaceAll("\\s+", " ").replaceAll("\\\\n", " ")
                     .replaceAll("\\\\/", "/");
+            msg = sanitizeMessage(serverCode, msg);
             if (msg.trim().isEmpty()) {
-                msg = String.format(ERROR_CODE_PREFIX_PATTERN, serverCode) + " <Unreadable error message> (transport error: " + httpResponse.getCode() + ")";
+                msg = String.format(ERROR_CODE_PREFIX_PATTERN, serverCode) + "Exception: <Unreadable error message> (transport error: " + httpResponse.getCode() + ")";
             }
             return new ServerException(serverCode, "Code: " + msg, httpResponse.getCode());
         } catch (Exception e) {
             LOG.error("Failed to read error message", e);
-            return new ServerException(serverCode, String.format(ERROR_CODE_PREFIX_PATTERN, serverCode) + " <Unreadable error message> (transport error: " + httpResponse.getCode() + ")", httpResponse.getCode());
+            return new ServerException(serverCode, String.format(ERROR_CODE_PREFIX_PATTERN, serverCode) + "Exception: <Unreadable error message> (transport error: " + httpResponse.getCode() + ")", httpResponse.getCode());
         }
+    }
+
+    private String sanitizeMessage(int serverCode, String msg) {
+        if (msg == null) {
+            return null;
+        }
+
+        String remoteServerPrefix = String.format(REMOTE_SERVER_ERROR_PATTERN, serverCode);
+        if (msg.startsWith(remoteServerPrefix)) {
+            int idx = msg.indexOf(" ", remoteServerPrefix.length());
+            if (idx <= 0) {
+                // could not find appropriate pattern
+                return remoteServerPrefix.trim() + ".";
+            }
+            String tail = msg.substring(idx);
+            return remoteServerPrefix.trim() + "." + tail;
+        }
+
+        return msg;
     }
 
     private static final long POOL_VENT_TIMEOUT = 10000L;
@@ -894,6 +926,24 @@ public class HttpAPIClientHelper {
                 sslParams.setServerNames(Collections.singletonList(defaultSNI));
                 socket.setSSLParameters(sslParams);
             }
+        }
+    }
+
+    private static final class TrustAllManager implements X509TrustManager {
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            // ignore
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            // ignore
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
         }
     }
 }

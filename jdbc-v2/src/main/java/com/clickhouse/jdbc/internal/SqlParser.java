@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 public class SqlParser {
 
     private static final Logger LOG = LoggerFactory.getLogger(SqlParser.class);
+    private final static Pattern UNQUOTE_IDENTIFIER = Pattern.compile("^[\"`]?(.+?)[\"`]?$");
 
     public ParsedStatement parsedStatement(String sql) {
         ParsedStatement parserListener = new ParsedStatement();
@@ -40,6 +41,25 @@ public class SqlParser {
         IterativeParseTreeWalker.DEFAULT.walk(listener, parseTree);
 
         return parser;
+    }
+
+    public static String unquoteIdentifier(String str) {
+        Matcher matcher = UNQUOTE_IDENTIFIER.matcher(str.trim());
+        if (matcher.find()) {
+            return matcher.group(1).replace("\\\\", "\\");
+        } else {
+            return str;
+        }
+    }
+
+    public static String escapeQuotes(String str) {
+        if (str == null || str.isEmpty()) {
+            return str;
+        }
+        return str
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\"", "\\\"");
     }
 
     private static class ParserErrorListener extends BaseErrorListener {
