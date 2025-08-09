@@ -5,13 +5,13 @@ import com.clickhouse.client.ClickHouseNode;
 import com.clickhouse.client.ClickHouseProtocol;
 import com.clickhouse.client.ClickHouseServerForTest;
 import com.clickhouse.client.api.Client;
-import com.clickhouse.client.api.DataTypeUtils;
 import com.clickhouse.client.api.command.CommandSettings;
 import com.clickhouse.client.api.enums.Protocol;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metadata.TableSchema;
 import com.clickhouse.client.api.query.GenericRecord;
 import com.clickhouse.client.api.query.QueryResponse;
+import com.clickhouse.client.api.query.QuerySettings;
 import com.clickhouse.data.ClickHouseDataType;
 import com.clickhouse.data.ClickHouseVersion;
 import lombok.AllArgsConstructor;
@@ -21,7 +21,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
@@ -30,10 +29,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.Period;
-import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalAccessor;
-import java.time.temporal.TemporalField;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -331,7 +327,7 @@ public class DataTypeTests extends BaseIntegrationTest {
 
         testVariantWith("arrays", new String[]{"field Variant(Array(Array(String)), Array(Array(Int32)))"},
                 new Object[]{
-                        new int[][]{ new int[] {1, 2}, new int[] { 3, 4}},
+                        new int[][]{new int[]{1, 2}, new int[]{3, 4}},
                         new String[][]{new String[]{"a", "b"}, new String[]{"c", "d"}},
                         Arrays.asList(Arrays.asList("e", "f"), Arrays.asList("j", "h"))
                 },
@@ -507,60 +503,56 @@ public class DataTypeTests extends BaseIntegrationTest {
             client.insert(table, data).get().close();
             List<GenericRecord> rows = client.queryAll("SELECT * FROM " + table + " ORDER BY rowId DESC  ");
             GenericRecord row = rows.get(0);
-                String strValue = row.getString("field");
-                switch (dataType) {
-                    case Date:
-                    case Date32:
-                        strValue = row.getLocalDate("field").toString();
-                        break;
-                    case DateTime64:
-                    case DateTime:
-                    case DateTime32:
-                        strValue = row.getLocalDateTime("field").truncatedTo(ChronoUnit.SECONDS).toString();
-                        value = ((LocalDateTime) value).truncatedTo(ChronoUnit.SECONDS).toString();
-                        break;
-                    case Point:
-                        strValue = row.getGeoPoint("field").toString();
-                        break;
-                    case Ring:
-                        strValue = row.getGeoRing("field").toString();
-                        break;
-                    case Polygon:
-                        strValue = row.getGeoPolygon("field").toString();
-                        break;
-                    case MultiPolygon:
-                        strValue = row.getGeoMultiPolygon("field").toString();
-                        break;
-                    case Decimal32:
-                    case Decimal64:
-                    case Decimal128:
-                    case Decimal256:
-                        BigDecimal tmpDec = row.getBigDecimal("field").stripTrailingZeros();
-                        strValue = tmpDec.toPlainString();
-                        break;
-                    case IntervalMicrosecond:
-                    case IntervalMillisecond:
-                    case IntervalSecond:
-                    case IntervalMinute:
-                    case IntervalHour:
-                        strValue = String.valueOf(row.getTemporalAmount("field"));
-                        break;
-                    case IntervalDay:
-                    case IntervalWeek:
-                    case IntervalMonth:
-                    case IntervalQuarter:
-                    case IntervalYear:
-                        strValue = String.valueOf(row.getTemporalAmount("field"));
-                        Period period = (Period) value;
-                        long days = (period).getDays() + Math.round((period.toTotalMonths() / 12d) * 360);
-                        value = Period.ofDays((int) days);
-                        break;
-                }
-                if (value.getClass().isPrimitive()) {
-                    Assert.assertEquals(strValue, String.valueOf(value));
-                } else {
-                    Assert.assertEquals(strValue, String.valueOf(value));
-                }
+            String strValue = row.getString("field");
+            switch (dataType) {
+                case Date:
+                case Date32:
+                    strValue = row.getLocalDate("field").toString();
+                    break;
+                case DateTime64:
+                case DateTime:
+                case DateTime32:
+                    strValue = row.getLocalDateTime("field").truncatedTo(ChronoUnit.SECONDS).toString();
+                    value = ((LocalDateTime) value).truncatedTo(ChronoUnit.SECONDS).toString();
+                    break;
+                case Point:
+                    strValue = row.getGeoPoint("field").toString();
+                    break;
+                case Ring:
+                    strValue = row.getGeoRing("field").toString();
+                    break;
+                case Polygon:
+                    strValue = row.getGeoPolygon("field").toString();
+                    break;
+                case MultiPolygon:
+                    strValue = row.getGeoMultiPolygon("field").toString();
+                    break;
+                case Decimal32:
+                case Decimal64:
+                case Decimal128:
+                case Decimal256:
+                    BigDecimal tmpDec = row.getBigDecimal("field").stripTrailingZeros();
+                    strValue = tmpDec.toPlainString();
+                    break;
+                case IntervalMicrosecond:
+                case IntervalMillisecond:
+                case IntervalSecond:
+                case IntervalMinute:
+                case IntervalHour:
+                    strValue = String.valueOf(row.getTemporalAmount("field"));
+                    break;
+                case IntervalDay:
+                case IntervalWeek:
+                case IntervalMonth:
+                case IntervalQuarter:
+                case IntervalYear:
+                    strValue = String.valueOf(row.getTemporalAmount("field"));
+                    Period period = (Period) value;
+                    long days = (period).getDays() + Math.round((period.toTotalMonths() / 12d) * 360);
+                    value = Period.ofDays((int) days);
+                    break;
+            }
+            Assert.assertEquals(strValue, String.valueOf(value));
         }
     }
 
@@ -703,7 +695,8 @@ public class DataTypeTests extends BaseIntegrationTest {
         client.execute(tableDefinition(table, "o_num UInt32", "time Time"), (CommandSettings) new CommandSettings().serverSetting("allow_experimental_time_time64_type", "1")).get();
 
         String insertSQL = "INSERT INTO " + table + " VALUES (1, '999:00:00'), (2, '999:59:59'), (3, '000:00:00'), (4, '-999:59:59')";
-        try (QueryResponse response = client.query(insertSQL).get()) {}
+        try (QueryResponse response = client.query(insertSQL).get()) {
+        }
 
 
         List<GenericRecord> records = client.queryAll("SELECT * FROM " + table);
@@ -725,7 +718,7 @@ public class DataTypeTests extends BaseIntegrationTest {
 
         record = records.get(3);
         Assert.assertEquals(record.getInteger("o_num"), 4);
-        Assert.assertEquals(record.getInteger("time"), - (TimeUnit.HOURS.toSeconds(999) + TimeUnit.MINUTES.toSeconds(59) + 59));
+        Assert.assertEquals(record.getInteger("time"), -(TimeUnit.HOURS.toSeconds(999) + TimeUnit.MINUTES.toSeconds(59) + 59));
         Assert.assertEquals(record.getInstant("time"), Instant.ofEpochSecond(-
                 (TimeUnit.HOURS.toSeconds(999) + TimeUnit.MINUTES.toSeconds(59) + 59)));
     }
@@ -738,49 +731,49 @@ public class DataTypeTests extends BaseIntegrationTest {
 
         String table = "test_time64_type";
         client.execute("DROP TABLE IF EXISTS " + table).get();
-        client.execute(tableDefinition(table, "o_num UInt32", "t_sec Time64(0)",  "t_ms Time64(3)", "t_us Time64(6)", "t_ns Time64(9)"),
+        client.execute(tableDefinition(table, "o_num UInt32", "t_sec Time64(0)", "t_ms Time64(3)", "t_us Time64(6)", "t_ns Time64(9)"),
                 (CommandSettings) new CommandSettings().serverSetting("allow_experimental_time_time64_type", "1")).get();
 
-        String[][] values = new String[][] {
+        String[][] values = new String[][]{
                 {"00:01:00.123", "00:01:00.123", "00:01:00.123456", "00:01:00.123456789"},
                 {"-00:01:00.123", "-00:01:00.123", "-00:01:00.123456", "-00:01:00.123456789"},
                 {"-999:59:59.999", "-999:59:59.999", "-999:59:59.999999", "-999:59:59.999999999"},
                 {"999:59:59.999", "999:59:59.999", "999:59:59.999999", "999:59:59.999999999"},
         };
 
-        Long[][] expectedValues = new Long[][] {
-                {timeToSec(0, 1,0), timeToMs(0, 1,0) + 123, timeToUs(0, 1,0) + 123456, timeToNs(0, 1,0) + 123456789},
-                {-timeToSec(0, 1,0), -(timeToMs(0, 1,0) + 123), -(timeToUs(0, 1,0) + 123456), -(timeToNs(0, 1,0) + 123456789)},
-                {-timeToSec(999,59, 59), -(timeToMs(999,59, 59) + 999),
-                    -(timeToUs(999, 59, 59) + 999999), -(timeToNs(999, 59, 59) + 999999999)},
-                {timeToSec(999,59, 59), timeToMs(999,59, 59) + 999,
-                    timeToUs(999, 59, 59) + 999999, timeToNs(999, 59, 59) + 999999999},
+        Long[][] expectedValues = new Long[][]{
+                {timeToSec(0, 1, 0), timeToMs(0, 1, 0) + 123, timeToUs(0, 1, 0) + 123456, timeToNs(0, 1, 0) + 123456789},
+                {-timeToSec(0, 1, 0), -(timeToMs(0, 1, 0) + 123), -(timeToUs(0, 1, 0) + 123456), -(timeToNs(0, 1, 0) + 123456789)},
+                {-timeToSec(999, 59, 59), -(timeToMs(999, 59, 59) + 999),
+                        -(timeToUs(999, 59, 59) + 999999), -(timeToNs(999, 59, 59) + 999999999)},
+                {timeToSec(999, 59, 59), timeToMs(999, 59, 59) + 999,
+                        timeToUs(999, 59, 59) + 999999, timeToNs(999, 59, 59) + 999999999},
         };
-        
-        String[][] expectedInstantStrings = new String[][] {
+
+        String[][] expectedInstantStrings = new String[][]{
                 {"1970-01-01T00:01:00Z",
-                "1970-01-01T00:01:00.123Z",
-                "1970-01-01T00:01:00.123456Z",
-                "1970-01-01T00:01:00.123456789Z"},
+                        "1970-01-01T00:01:00.123Z",
+                        "1970-01-01T00:01:00.123456Z",
+                        "1970-01-01T00:01:00.123456789Z"},
 
                 {"1969-12-31T23:59:00Z",
-                "1969-12-31T23:58:59.877Z",
-                "1969-12-31T23:58:59.876544Z",
-                "1969-12-31T23:58:59.876543211Z"},
+                        "1969-12-31T23:58:59.877Z",
+                        "1969-12-31T23:58:59.876544Z",
+                        "1969-12-31T23:58:59.876543211Z"},
 
                 {"1969-11-20T08:00:01Z",
-                "1969-11-20T08:00:00.001Z",
-                "1969-11-20T08:00:00.000001Z",
-                "1969-11-20T08:00:00.000000001Z"},
+                        "1969-11-20T08:00:00.001Z",
+                        "1969-11-20T08:00:00.000001Z",
+                        "1969-11-20T08:00:00.000000001Z"},
 
 
                 {"1970-02-11T15:59:59Z",
-                "1970-02-11T15:59:59.999Z",
-                "1970-02-11T15:59:59.999999Z",
-                "1970-02-11T15:59:59.999999999Z"},
+                        "1970-02-11T15:59:59.999Z",
+                        "1970-02-11T15:59:59.999999Z",
+                        "1970-02-11T15:59:59.999999999Z"},
         };
-        
-        for  (int i = 0; i < values.length; i++) {
+
+        for (int i = 0; i < values.length; i++) {
             StringBuilder insertSQL = new StringBuilder("INSERT INTO " + table + " VALUES (" + i + ", ");
             for (int j = 0; j < values[i].length; j++) {
                 insertSQL.append("'").append(values[i][j]).append("', ");
@@ -795,15 +788,15 @@ public class DataTypeTests extends BaseIntegrationTest {
             GenericRecord record = records.get(0);
             Assert.assertEquals(record.getInteger("o_num"), i);
             for (int j = 0; j < values[i].length; j++) {
-                Assert.assertEquals(record.getLong(j + 2), expectedValues[i][j], "failed at value "  +j);
+                Assert.assertEquals(record.getLong(j + 2), expectedValues[i][j], "failed at value " + j);
                 Instant actualInstant = record.getInstant(j + 2);
-                Assert.assertEquals(actualInstant.toString(), expectedInstantStrings[i][j], "failed at value "  +j);
+                Assert.assertEquals(actualInstant.toString(), expectedInstantStrings[i][j], "failed at value " + j);
             }
 
             client.execute("TRUNCATE TABLE " + table).get();
         }
     }
-    
+
     private static long timeToSec(int hours, int minutes, int seconds) {
         return TimeUnit.HOURS.toSeconds(hours) + TimeUnit.MINUTES.toSeconds(minutes) + seconds;
     }
@@ -825,11 +818,16 @@ public class DataTypeTests extends BaseIntegrationTest {
             return;
         }
 
+        QuerySettings settings = new CommandSettings().serverSetting("allow_experimental_dynamic_type", "1");
+        if (isVersionMatch("(25.6,]")) {
+            // time64 was introduced in 25.6
+            settings = settings.serverSetting("allow_experimental_time_time64_type", "1");
+        }
+
         String table = "test_dynamic_with_" + withWhat;
         client.execute("DROP TABLE IF EXISTS " + table).get();
         client.execute(tableDefinition(table, "rowId Int32", "field Dynamic"),
-                (CommandSettings) new CommandSettings().serverSetting("allow_experimental_dynamic_type", "1")
-                        .serverSetting("allow_experimental_time_time64_type", "1")).get();
+                (CommandSettings) settings).get();
 
         client.register(DTOForDynamicPrimitivesTests.class, client.getTableSchema(table));
 
@@ -850,15 +848,18 @@ public class DataTypeTests extends BaseIntegrationTest {
             return;
         }
 
+        QuerySettings settings = new CommandSettings().serverSetting("allow_experimental_variant_type", "1");
+        if (isVersionMatch("(25.6,]")) {
+            // time64 was introduced in 25.6
+            settings = settings.serverSetting("allow_experimental_time_time64_type", "1");
+        }
+
         String table = "test_variant_with_" + withWhat;
         String[] actualFields = new String[fields.length + 1];
         actualFields[0] = "rowId Int32";
         System.arraycopy(fields, 0, actualFields, 1, fields.length);
         client.execute("DROP TABLE IF EXISTS " + table).get();
-        client.execute(tableDefinition(table, actualFields),
-                (CommandSettings) new CommandSettings()
-                        .serverSetting("allow_experimental_variant_type", "1")
-                        .serverSetting("allow_experimental_time_time64_type", "1")).get();
+        client.execute(tableDefinition(table, actualFields), (CommandSettings) settings).get();
 
         client.register(DTOForVariantPrimitivesTests.class, client.getTableSchema(table));
 

@@ -2,6 +2,7 @@ package com.clickhouse.client.api.internal;
 
 import com.clickhouse.client.ClickHouseSslContextProvider;
 import com.clickhouse.client.api.ClickHouseException;
+import com.clickhouse.client.api.ClickHouseSslValidationMode;
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.ClientConfigProperties;
 import com.clickhouse.client.api.ClientException;
@@ -187,7 +188,7 @@ public class HttpAPIClientHelper {
             } catch (SSLException e) {
                 throw new ClientMisconfigurationException("Failed to create SSL context from certificates", e);
             }
-        } else if ("none".equals(configuration.get(ClientConfigProperties.SSL_MODE.getKey()))) {
+        } else if (ClickHouseSslValidationMode.NONE.equals(configuration.get(ClientConfigProperties.SSL_MODE.getKey()))) {
             try {
                 sslContext = SSLContext.getInstance("TLS");
                 sslContext.init(new KeyManager[0], new TrustManager[]{new TrustAllManager()}, new SecureRandom());
@@ -415,7 +416,7 @@ public class HttpAPIClientHelper {
             if (msg.trim().isEmpty()) {
                 msg = String.format(ERROR_CODE_PREFIX_PATTERN, serverCode) + "Exception: <Unreadable error message> (transport error: " + httpResponse.getCode() + ")";
             }
-            return new ServerException(serverCode, "Code: " + msg, httpResponse.getCode());
+            return new ServerException(serverCode, msg, httpResponse.getCode());
         } catch (Exception e) {
             LOG.error("Failed to read error message", e);
             return new ServerException(serverCode, String.format(ERROR_CODE_PREFIX_PATTERN, serverCode) + "Exception: <Unreadable error message> (transport error: " + httpResponse.getCode() + ")", httpResponse.getCode());
