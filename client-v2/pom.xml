@@ -161,7 +161,6 @@
                             <version>1.18.38</version>
                         </path>
                     </annotationProcessorPaths>
-                    <release>8</release>
                 </configuration>
             </plugin>
             <plugin>

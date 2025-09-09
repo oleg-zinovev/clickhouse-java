@@ -109,6 +109,8 @@ public enum ClientConfigProperties {
 
     SSL_KEY_STORE_PASSWORD("key_store_password",  String.class),
 
+    SSL_MODE("sslmode", ClickHouseSslValidationMode.class, ClickHouseSslValidationMode.STRICT.toString()),
+
     SSL_KEY("ssl_key",  String.class),
 
     CA_CERTIFICATE("sslrootcert", String.class),
