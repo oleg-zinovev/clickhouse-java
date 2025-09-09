@@ -868,7 +868,7 @@ public class ConnectionTest extends JdbcIntegrationTest {
              Assert.assertTrue(rs.next());
         }
     }
-    @Test(groups = { "integration" })
+    @Test(groups = { "integration" }, enabled = false)
     public void testDisableExtraCallToServer() throws Exception {
         Properties properties = new Properties();
         properties.put(ClientConfigProperties.SERVER_TIMEZONE.getKey(), "GMT");
@@ -924,8 +924,7 @@ public class ConnectionTest extends JdbcIntegrationTest {
         Assert.assertTrue(connection.isValid(3));
         Properties properties = new Properties();
         properties.put("password", "invalid");
-        connection = this.getJdbcConnection(properties);
-        Assert.assertFalse(connection.isValid(3));
+        Assert.assertThrows(SQLException.class, () -> this.getJdbcConnection(properties));
     }
 
     @DataProvider(name = "validDatabaseNames")

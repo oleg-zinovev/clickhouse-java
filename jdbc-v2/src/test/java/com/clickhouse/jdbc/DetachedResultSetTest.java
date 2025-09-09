@@ -1,6 +1,5 @@
 package com.clickhouse.jdbc;
 
-import com.clickhouse.client.api.DataTypeUtils;
 import com.clickhouse.jdbc.internal.DetachedResultSet;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -9,33 +8,17 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringReader;
 import java.math.BigDecimal;
-import java.sql.Array;
-import java.sql.Blob;
-import java.sql.Clob;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.NClob;
-import java.sql.PreparedStatement;
-import java.sql.Ref;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.sql.Types;
+import java.sql.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertThrows;
-import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.*;
 
 public class DetachedResultSetTest extends JdbcIntegrationTest {
 
@@ -355,7 +338,7 @@ public class DetachedResultSetTest extends JdbcIntegrationTest {
         }
     }
 
-    @Test(groups = { "integration" })
+    @Test(groups = {"integration"})
     public void testDateTypes() throws SQLException {
         runQuery("CREATE TABLE detached_rs_test_dates (order Int8, "
                 + "date Date, date32 Date32, " +
@@ -426,8 +409,18 @@ public class DetachedResultSetTest extends JdbcIntegrationTest {
                     assertEquals(rs.getTimestamp("dateTime649").toString(), "2261-12-31 23:59:59.999999999");
 
                     assertTrue(rs.next());
-                    assertEquals(rs.getDate("date").toString(), date.toString());
-                    assertEquals(rs.getDate("date32").toString(), date32.toString());
+                    assertEquals(rs.getDate("date").toString(), Date.valueOf(now.toLocalDate()
+                                    .atStartOfDay()
+                                    .atZone(ZoneId.systemDefault())
+                                    .withZoneSameInstant(ZoneOffset.UTC)
+                                    .toLocalDate())
+                            .toString());
+                    assertEquals(rs.getDate("date32").toString(), Date.valueOf(now.toLocalDate()
+                                    .atStartOfDay()
+                                    .atZone(ZoneId.systemDefault())
+                                    .withZoneSameInstant(ZoneOffset.UTC)
+                                    .toLocalDate())
+                            .toString());
                     assertEquals(rs.getTimestamp("dateTime").toString(), Timestamp.valueOf(dateTime.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());
                     assertEquals(rs.getTimestamp("dateTime32").toString(), Timestamp.valueOf(dateTime32.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());
                     assertEquals(rs.getTimestamp("dateTime643").toString(), Timestamp.valueOf(dateTime643.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());
@@ -469,8 +462,18 @@ public class DetachedResultSetTest extends JdbcIntegrationTest {
                     assertEquals(rs.getObject("dateTime649").toString(), "2261-12-31 23:59:59.999999999");
 
                     assertTrue(rs.next());
-                    assertEquals(rs.getObject("date").toString(), date.toString());
-                    assertEquals(rs.getObject("date32").toString(), date32.toString());
+                    assertEquals(rs.getObject("date").toString(), Date.valueOf(now.toLocalDate()
+                                    .atStartOfDay()
+                                    .atZone(ZoneId.systemDefault())
+                                    .withZoneSameInstant(ZoneOffset.UTC)
+                                    .toLocalDate())
+                            .toString());
+                    assertEquals(rs.getObject("date32").toString(), Date.valueOf(now.toLocalDate()
+                                    .atStartOfDay()
+                                    .atZone(ZoneId.systemDefault())
+                                    .withZoneSameInstant(ZoneOffset.UTC)
+                                    .toLocalDate())
+                            .toString());
 
                     assertEquals(rs.getObject("dateTime").toString(), Timestamp.valueOf(dateTime.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());
                     assertEquals(rs.getObject("dateTime32").toString(), Timestamp.valueOf(dateTime32.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());
@@ -485,8 +488,7 @@ public class DetachedResultSetTest extends JdbcIntegrationTest {
 
         try (Connection conn = getJdbcConnection();
              Statement stmt = conn.createStatement();
-             ResultSet srcRs = stmt.executeQuery("SELECT * FROM detached_rs_test_dates ORDER BY order"))
-        {
+             ResultSet srcRs = stmt.executeQuery("SELECT * FROM detached_rs_test_dates ORDER BY order")) {
             ResultSet rs = DetachedResultSet.createFromResultSet(srcRs, defaultCalendar, Collections.emptyList());
             assertTrue(rs.next());
             assertEquals(rs.getString("date"), "1970-01-01");

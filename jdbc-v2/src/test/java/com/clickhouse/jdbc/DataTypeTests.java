@@ -503,16 +503,16 @@ public class DataTypeTests extends JdbcIntegrationTest {
 
                     assertTrue(rs.next());
                     assertEquals(rs.getDate("date").toString(), Date.valueOf(now.toLocalDate()
-                            .atStartOfDay()
-                            .atZone(ZoneId.systemDefault())
-                            .withZoneSameInstant(ZoneOffset.UTC)
-                            .toLocalDate())
+                                    .atStartOfDay()
+                                    .atZone(ZoneId.systemDefault())
+                                    .withZoneSameInstant(ZoneOffset.UTC)
+                                    .toLocalDate())
                             .toString());
                     assertEquals(rs.getDate("date32").toString(), Date.valueOf(now.toLocalDate()
-                            .atStartOfDay()
-                            .atZone(ZoneId.systemDefault())
-                            .withZoneSameInstant(ZoneOffset.UTC)
-                            .toLocalDate())
+                                    .atStartOfDay()
+                                    .atZone(ZoneId.systemDefault())
+                                    .withZoneSameInstant(ZoneOffset.UTC)
+                                    .toLocalDate())
                             .toString());
                     assertEquals(rs.getTimestamp("dateTime").toString(), Timestamp.valueOf(dateTime.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());
                     assertEquals(rs.getTimestamp("dateTime32").toString(), Timestamp.valueOf(dateTime32.toInstant().atZone(ZoneId.of("UTC")).toLocalDateTime()).toString());

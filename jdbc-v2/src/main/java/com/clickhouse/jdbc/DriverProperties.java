@@ -35,6 +35,11 @@ public enum DriverProperties {
      *  Enables closing result set before
      */
     RESULTSET_AUTO_CLOSE("jdbc_resultset_auto_close", "true"),
+
+    /**
+     * Cluster name.
+     */
+    CLUSTER_NAME("cluster_name", null)
     ;
 
 

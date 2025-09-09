@@ -209,7 +209,13 @@ public class Client implements AutoCloseable {
             try (ClickHouseBinaryFormatReader reader = this.newBinaryFormatReader(response)) {
                 if (reader.next() != null) {
                     this.configuration.put(ClientConfigProperties.USER.getKey(), reader.getString("user"));
-                    this.configuration.put(ClientConfigProperties.SERVER_TIMEZONE.getKey(), reader.getString("timezone"));
+                    this.configuration.compute(ClientConfigProperties.SERVER_TIMEZONE.getKey(), (k, v) -> {
+                        if (v != null) {
+                            return v;
+                        } else {
+                            return TimeZone.getTimeZone(reader.getString("timezone"));
+                        }
+                    });
                     serverVersion = reader.getString("version");
                 }
             }

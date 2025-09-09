@@ -36,7 +36,6 @@ import java.sql.Statement;
 import java.sql.Struct;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
@@ -105,10 +104,12 @@ public class ConnectionImpl implements Connection, JdbcV2Wrapper {
             this.client = this.config.applyClientProperties(new Client.Builder())
                     .setClientName(clientName)
                     .build();
-            String serverTimezone = this.client.getServerTimeZone();
-            if (serverTimezone == null) {
-                // we cannot operate without timezone
+            try {
                 this.client.loadServerInfo();
+            } catch (Exception e) {
+                this.client.close();
+                this.closed = true;
+                throw e;
             }
             this.schema = client.getDefaultDatabase();
             this.defaultQuerySettings = new QuerySettings()
@@ -120,6 +121,8 @@ public class ConnectionImpl implements Connection, JdbcV2Wrapper {
 
             this.sqlParser = new SqlParser();
             this.featureManager = new FeatureManager(this.config);
+            this.cluster = config.getDriverProperty(DriverProperties.CLUSTER_NAME.getKey(), null);
+            this.onCluster = this.cluster != null;
         } catch (SQLException e) {
             throw e;
         } catch (Exception e) {
