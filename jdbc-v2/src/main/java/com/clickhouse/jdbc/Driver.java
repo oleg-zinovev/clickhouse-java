@@ -60,6 +60,8 @@ public class Driver implements java.sql.Driver {
 
     public static final String DRIVER_CLIENT_NAME = "jdbc-v2/";
 
+    private static final Driver INSTANCE = new Driver();
+
     static {
         log.debug("Initializing ClickHouse JDBC driver V2");
 
@@ -86,8 +88,7 @@ public class Driver implements java.sql.Driver {
         majorVersion = tmpMajorVersion;
         minorVersion = tmpMinorVersion;
 
-        //Load the driver
-        //load(); //Commented out to avoid loading the driver multiple times, because we're referenced in V1
+        load();
     }
 
     public Driver() {
@@ -164,6 +165,4 @@ public class Driver implements java.sql.Driver {
     public java.util.logging.Logger getParentLogger() throws SQLFeatureNotSupportedException {
         throw new SQLFeatureNotSupportedException("Method not supported", ExceptionUtils.SQL_STATE_FEATURE_NOT_SUPPORTED);
     }
-
-    private static final Driver INSTANCE = new Driver();
 }
